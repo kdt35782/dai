@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SM3加密测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #555;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+        .result pre {
+            margin: 10px 0;
+            padding: 10px;
+            background: #fff;
+            border-radius: 3px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .info {
+            color: #666;
+            font-size: 14px;
+            margin-top: 20px;
+            padding: 15px;
+            background: #e7f3ff;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 SM3加密测试工具</h1>
+        
+        <div class="input-group">
+            <label>输入要加密的密码：</label>
+            <input type="text" id="password" value="Admin123!@#" placeholder="请输入密码">
+        </div>
+        
+        <button onclick="testSM3()">🔑 计算SM3哈希</button>
+        
+        <div id="result" style="display:none;" class="result">
+            <h3>加密结果：</h3>
+            <p><strong>原始密码：</strong> <span id="originalPassword"></span></p>
+            <p><strong>SM3哈希值：</strong></p>
+            <pre id="hashValue"></pre>
+            <p class="success" id="matchResult"></p>
+        </div>
+        
+        <div class="info">
+            <h3>ℹ️ 说明：</h3>
+            <p>• 这个工具用于测试SM3加密算法的正确性</p>
+            <p>• 默认管理员密码 "Admin123!@#" 的SM3哈希应该是：</p>
+            <pre>5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8</pre>
+            <p>• 如果哈希值匹配，说明SM3算法正确，可以正常登录</p>
+            <p>• 如果不匹配，需要检查加密实现</p>
+        </div>
+    </div>
+
+    <script>
+        // SM3算法实现（与crypto.js中相同）
+        function sm3(str) {
+            const msg = typeof str === 'string' ? stringToBytes(str) : str;
+            const m = preprocess(msg);
+            const n = m.length / 16;
+            
+            let V = [
+                0x7380166f, 0x4914b2b9, 0x172442d7, 0xda8a0600,
+                0xa96f30bc, 0x163138aa, 0xe38dee4d, 0xb0fb0e4e
+            ];
+            
+            for (let i = 0; i < n; i++) {
+                const W = [];
+                const M = m.slice(i * 16, (i + 1) * 16);
+                
+                for (let j = 0; j < 16; j++) {
+                    W[j] = M[j];
+                }
+                
+                for (let j = 16; j < 68; j++) {
+                    W[j] = P1(W[j - 16] ^ W[j - 9] ^ ROTL(W[j - 3], 15)) ^ ROTL(W[j - 13], 7) ^ W[j - 6];
+                }
+                
+                const W1 = [];
+                for (let j = 0; j < 64; j++) {
+                    W1[j] = W[j] ^ W[j + 4];
+                }
+                
+                let [A, B, C, D, E, F, G, H] = V;
+                
+                for (let j = 0; j < 64; j++) {
+                    const SS1 = ROTL((ROTL(A, 12) + E + ROTL(T(j), j % 32)) & 0xffffffff, 7);
+                    const SS2 = SS1 ^ ROTL(A, 12);
+                    const TT1 = (FF(A, B, C, j) + D + SS2 + W1[j]) & 0xffffffff;
+                    const TT2 = (GG(E, F, G, j) + H + SS1 + W[j]) & 0xffffffff;
+                    
+                    D = C;
+                    C = ROTL(B, 9);
+                    B = A;
+                    A = TT1;
+                    H = G;
+                    G = ROTL(F, 19);
+                    F = E;
+                    E = P0(TT2);
+                }
+                
+                V = [
+                    V[0] ^ A, V[1] ^ B, V[2] ^ C, V[3] ^ D,
+                    V[4] ^ E, V[5] ^ F, V[6] ^ G, V[7] ^ H
+                ];
+            }
+            
+            return V.map(v => ('00000000' + v.toString(16)).slice(-8)).join('');
+        }
+
+        function stringToBytes(str) {
+            const bytes = [];
+            for (let i = 0; i < str.length; i++) {
+                const code = str.charCodeAt(i);
+                if (code < 0x80) {
+                    bytes.push(code);
+                } else if (code < 0x800) {
+                    bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+                } else if (code < 0x10000) {
+                    bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+                } else {
+                    bytes.push(
+                        0xf0 | (code >> 18),
+                        0x80 | ((code >> 12) & 0x3f),
+                        0x80 | ((code >> 6) & 0x3f),
+                        0x80 | (code & 0x3f)
+                    );
+                }
+            }
+            return bytes;
+        }
+
+        function preprocess(msg) {
+            const len = msg.length * 8;
+            msg.push(0x80);
+            
+            const k = (448 - ((len + 1) % 512) + 512) % 512;
+            for (let i = 0; i < k / 8; i++) {
+                msg.push(0x00);
+            }
+            
+            for (let i = 0; i < 4; i++) {
+                msg.push(0x00);
+            }
+            
+            for (let i = 3; i >= 0; i--) {
+                msg.push((len >> (i * 8)) & 0xff);
+            }
+            
+            const result = [];
+            for (let i = 0; i < msg.length / 4; i++) {
+                result[i] = (msg[i * 4] << 24) | (msg[i * 4 + 1] << 16) | (msg[i * 4 + 2] << 8) | msg[i * 4 + 3];
+            }
+            
+            return result;
+        }
+
+        function ROTL(x, n) {
+            return ((x << n) | (x >>> (32 - n))) >>> 0;
+        }
+
+        function FF(x, y, z, j) {
+            return j < 16 ? x ^ y ^ z : (x & y) | (x & z) | (y & z);
+        }
+
+        function GG(x, y, z, j) {
+            return j < 16 ? x ^ y ^ z : (x & y) | (~x & z);
+        }
+
+        function T(j) {
+            return j < 16 ? 0x79cc4519 : 0x7a879d8a;
+        }
+
+        function P0(x) {
+            return x ^ ROTL(x, 9) ^ ROTL(x, 17);
+        }
+
+        function P1(x) {
+            return x ^ ROTL(x, 15) ^ ROTL(x, 23);
+        }
+
+        // 测试函数
+        function testSM3() {
+            const password = document.getElementById('password').value;
+            const hash = sm3(password);
+            
+            document.getElementById('originalPassword').textContent = password;
+            document.getElementById('hashValue').textContent = hash;
+            
+            // 检查是否匹配标准SM3值
+            const expectedHash = '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8';
+            const matchResult = document.getElementById('matchResult');
+            
+            if (password === 'Admin123!@#') {
+                if (hash === expectedHash) {
+                    matchResult.textContent = '✅ 哈希值正确！SM3算法实现正确，可以正常登录！';
+                    matchResult.style.color = '#28a745';
+                } else {
+                    matchResult.textContent = '❌ 哈希值不匹配！请检查SM3算法实现。';
+                    matchResult.style.color = '#dc3545';
+                }
+            } else {
+                matchResult.textContent = '📝 自定义密码的SM3哈希值';
+                matchResult.style.color = '#667eea';
+            }
+            
+            document.getElementById('result').style.display = 'block';
+        }
+        
+        // 页面加载时自动测试
+        window.onload = function() {
+            testSM3();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户注册测试工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            display: none;
+        }
+        .result.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .code-block {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 用户注册测试工具</h1>
+        
+        <div class="info">
+            <strong>说明：</strong><br>
+            1. 填写注册信息，点击"生成注册请求"<br>
+            2. 密码会自动使用SM3加密<br>
+            3. 复制生成的curl命令在终端执行，或使用"直接注册"按钮<br>
+            4. 后端地址：http://localhost:3000
+        </div>
+
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="username">用户名 *</label>
+                <input type="text" id="username" placeholder="4-20个字符" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">密码 *</label>
+                <input type="password" id="password" placeholder="8-20位，含大小写字母、数字和特殊字符" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="email">邮箱 *</label>
+                <input type="email" id="email" placeholder="example@email.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="phone">手机号 *</label>
+                <input type="tel" id="phone" placeholder="13800138000" required>
+            </div>
+
+            <button type="button" onclick="generateCurl()">生成注册请求</button>
+            <button type="button" onclick="directRegister()" style="background-color: #2196F3;">直接注册到后端</button>
+        </form>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        // SM3算法实现（与前端crypto.js保持一致）
+        function sm3(str) {
+            const msg = typeof str === 'string' ? stringToBytes(str) : str
+            const m = preprocess(msg)
+            const n = m.length / 16
+            
+            let V = [
+                0x7380166f, 0x4914b2b9, 0x172442d7, 0xda8a0600,
+                0xa96f30bc, 0x163138aa, 0xe38dee4d, 0xb0fb0e4e
+            ]
+            
+            for (let i = 0; i < n; i++) {
+                const W = []
+                const M = m.slice(i * 16, (i + 1) * 16)
+                
+                for (let j = 0; j < 16; j++) {
+                    W[j] = M[j]
+                }
+                
+                for (let j = 16; j < 68; j++) {
+                    W[j] = P1(W[j - 16] ^ W[j - 9] ^ ROTL(W[j - 3], 15)) ^ ROTL(W[j - 13], 7) ^ W[j - 6]
+                }
+                
+                const W1 = []
+                for (let j = 0; j < 64; j++) {
+                    W1[j] = W[j] ^ W[j + 4]
+                }
+                
+                let [A, B, C, D, E, F, G, H] = V
+                
+                for (let j = 0; j < 64; j++) {
+                    const SS1 = ROTL((ROTL(A, 12) + E + ROTL(T(j), j % 32)) & 0xffffffff, 7)
+                    const SS2 = SS1 ^ ROTL(A, 12)
+                    const TT1 = (FF(A, B, C, j) + D + SS2 + W1[j]) & 0xffffffff
+                    const TT2 = (GG(E, F, G, j) + H + SS1 + W[j]) & 0xffffffff
+                    
+                    D = C
+                    C = ROTL(B, 9)
+                    B = A
+                    A = TT1
+                    H = G
+                    G = ROTL(F, 19)
+                    F = E
+                    E = P0(TT2)
+                }
+                
+                V = [
+                    V[0] ^ A, V[1] ^ B, V[2] ^ C, V[3] ^ D,
+                    V[4] ^ E, V[5] ^ F, V[6] ^ G, V[7] ^ H
+                ]
+            }
+            
+            return V.map(v => ('00000000' + v.toString(16)).slice(-8)).join('')
+        }
+
+        function stringToBytes(str) {
+            const bytes = []
+            for (let i = 0; i < str.length; i++) {
+                const code = str.charCodeAt(i)
+                if (code < 0x80) {
+                    bytes.push(code)
+                } else if (code < 0x800) {
+                    bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f))
+                } else if (code < 0x10000) {
+                    bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f))
+                } else {
+                    bytes.push(
+                        0xf0 | (code >> 18),
+                        0x80 | ((code >> 12) & 0x3f),
+                        0x80 | ((code >> 6) & 0x3f),
+                        0x80 | (code & 0x3f)
+                    )
+                }
+            }
+            return bytes
+        }
+
+        function preprocess(bytes) {
+            const l = bytes.length * 8
+            const k = (512 + 448 - (l + 1) % 512) % 512
+            const len = (l + k + 65) / 32
+            
+            const m = new Array(len)
+            for (let i = 0; i < len; i++) {
+                m[i] = 0
+            }
+            
+            for (let i = 0; i < bytes.length; i++) {
+                m[i >> 2] |= bytes[i] << (24 - (i % 4) * 8)
+            }
+            
+            m[bytes.length >> 2] |= 0x80 << (24 - (bytes.length % 4) * 8)
+            m[len - 1] = l & 0xffffffff
+            
+            return m
+        }
+
+        function ROTL(x, n) {
+            return ((x << n) | (x >>> (32 - n))) & 0xffffffff
+        }
+
+        function P0(x) {
+            return x ^ ROTL(x, 9) ^ ROTL(x, 17)
+        }
+
+        function P1(x) {
+            return x ^ ROTL(x, 15) ^ ROTL(x, 23)
+        }
+
+        function FF(x, y, z, j) {
+            return j < 16 ? x ^ y ^ z : (x & y) | (x & z) | (y & z)
+        }
+
+        function GG(x, y, z, j) {
+            return j < 16 ? x ^ y ^ z : (x & y) | (~x & z)
+        }
+
+        function T(j) {
+            return j < 16 ? 0x79cc4519 : 0x7a879d8a
+        }
+
+        function encryptPassword(password) {
+            return sm3(password)
+        }
+
+        function generateCurl() {
+            const username = document.getElementById('username').value
+            const password = document.getElementById('password').value
+            const email = document.getElementById('email').value
+            const phone = document.getElementById('phone').value
+
+            if (!username || !password || !email || !phone) {
+                showResult('请填写完整信息', 'error')
+                return
+            }
+
+            // SM3加密密码
+            const hashedPassword = encryptPassword(password)
+            
+            const curlCommand = `curl -X POST http://localhost:3000/api/user/register \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "username": "${username}",
+    "password": "${hashedPassword}",
+    "email": "${email}",
+    "phone": "${phone}",
+    "verifyCode": "123456"
+  }'`
+
+            const resultHTML = `
+                <h3>✅ 注册请求已生成</h3>
+                <p><strong>原始密码：</strong>${password}</p>
+                <p><strong>SM3加密后：</strong>${hashedPassword}</p>
+                <h4>方法1：复制以下命令在终端执行</h4>
+                <div class="code-block">${curlCommand}</div>
+                <h4>方法2：点击上方"直接注册到后端"按钮</h4>
+            `
+            
+            showResult(resultHTML, 'success')
+        }
+
+        async function directRegister() {
+            const username = document.getElementById('username').value
+            const password = document.getElementById('password').value
+            const email = document.getElementById('email').value
+            const phone = document.getElementById('phone').value
+
+            if (!username || !password || !email || !phone) {
+                showResult('请填写完整信息', 'error')
+                return
+            }
+
+            // SM3加密密码
+            const hashedPassword = encryptPassword(password)
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/user/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: hashedPassword,
+                        email: email,
+                        phone: phone,
+                        verifyCode: '123456'
+                    })
+                })
+
+                const result = await response.json()
+                
+                if (response.ok && result.code === 200) {
+                    const resultHTML = `
+                        <h3>🎉 注册成功！</h3>
+                        <p><strong>用户ID：</strong>${result.data.userId}</p>
+                        <p><strong>用户名：</strong>${result.data.username}</p>
+                        <p><strong>邮箱：</strong>${result.data.email}</p>
+                        <p>现在可以使用账号登录了！</p>
+                    `
+                    showResult(resultHTML, 'success')
+                } else {
+                    showResult(`❌ 注册失败：${result.message}`, 'error')
+                }
+            } catch (error) {
+                showResult(`❌ 请求失败：${error.message}<br>请确保后端服务正在运行（http://localhost:3000）`, 'error')
+            }
+        }
+
+        function showResult(html, type) {
+            const resultDiv = document.getElementById('result')
+            resultDiv.innerHTML = html
+            resultDiv.className = 'result ' + type
+            resultDiv.style.display = 'block'
+        }
+    </script>
+</body>
+</html>
